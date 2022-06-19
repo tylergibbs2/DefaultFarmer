@@ -2,6 +2,7 @@
 using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
+using System;
 using System.Reflection;
 
 namespace DefaultFarmer
@@ -18,13 +19,49 @@ namespace DefaultFarmer
 
             helper.Events.Display.MenuChanged += MenuChanged;
             helper.Events.GameLoop.UpdateTicked += UpdateTicked;
+
+            Migrate();
         }
 
-        public static void LoadDefaults(CharacterCustomizationDefaults menu)
+        public void Migrate()
         {
-            FarmerCustomizationData data = Data.ReadGlobalData<FarmerCustomizationData>("farmer-defaults");
+            FarmerCustomizationData data = Data.ReadGlobalData<FarmerCustomizationData>($"farmer-defaults");
+
             if (data is null)
                 return;
+
+            bool migrated = false;
+
+            // Have to migrate from the old format
+            for (int i = 0; i < CharacterCustomizationDefaults.presetCount; i++)
+            {
+                FarmerCustomizationData newData = Data.ReadGlobalData<FarmerCustomizationData>($"farmer-defaults-{i}");
+
+                // Only migrate if there is an empty slot
+                if (newData is null)
+                {
+                    Data.WriteGlobalData($"farmer-defaults-{i}", data);
+                    Data.WriteGlobalData<FarmerCustomizationData>("farmer-defaults", null);
+                    migrated = true;
+                    break;
+                }
+            }
+
+            if (!migrated)
+                throw new Exception("Failed to perform migration. All save slots are full! How?");
+
+            Monitor.Log("Successfully migrated DefaultFarmer to new index-based format.");
+        }
+
+        public static void LoadDefaults(CharacterCustomizationDefaults menu, int which)
+        {
+            FarmerCustomizationData data = Data.ReadGlobalData<FarmerCustomizationData>($"farmer-defaults-{which}");
+            if (data is null)
+            {
+                Game1.resetPlayer();
+                menu.GetType().BaseType.GetField("_displayFarmer", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(menu, Game1.player);
+                data = new();
+            }
 
             TextBox nameBox = (TextBox)menu.GetType().BaseType.GetField("nameBox", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(menu);
             TextBox farmnameBox = (TextBox)menu.GetType().BaseType.GetField("farmnameBox", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(menu);
@@ -58,7 +95,7 @@ namespace DefaultFarmer
             menu.pantsColorPicker.setColor(data.PantsColor);
         }
 
-        public static void SaveDefaults(CharacterCustomizationDefaults menu)
+        public static void SaveDefaults(CharacterCustomizationDefaults menu, int which)
         {
             bool skipIntro = (bool)menu.GetType().BaseType.GetField("skipIntro", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(menu);
 
@@ -85,7 +122,7 @@ namespace DefaultFarmer
                 SkipIntro = skipIntro
             };
 
-            Data.WriteGlobalData("farmer-defaults", data);
+            Data.WriteGlobalData($"farmer-defaults-{which}", data);
         }
 
         public void UpdateTicked(object sender, UpdateTickedEventArgs e)

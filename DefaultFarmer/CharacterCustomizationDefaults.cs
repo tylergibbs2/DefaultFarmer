@@ -4,22 +4,63 @@ using StardewValley;
 using StardewValley.Menus;
 using StardewValley.Objects;
 using System;
+using System.Collections.Generic;
 
 namespace DefaultFarmer
 {
+    public class PresetButton : ClickableComponent
+    {
+        public readonly float BaseScale = 1f;
+
+        public float Scale = 1f;
+
+        public Color TextColor = Game1.textColor;
+
+        public PresetButton(Rectangle bounds, string name, string label) : base(bounds, name, label) { }
+
+        public void Draw(SpriteBatch b)
+        {
+            IClickableMenu.drawTextureBox(
+                b,
+                Game1.menuTexture,
+                CharacterCustomizationDefaults.textureBoxRect,
+                bounds.X - 16,
+                bounds.Y - 16,
+                bounds.Width + 32,
+                bounds.Height + 24,
+                Color.White,
+                drawShadow: false,
+                scale: Scale
+            );
+
+            Utility.drawBoldText(
+                b,
+                label,
+                Game1.smallFont,
+                new Vector2(
+                    bounds.X,
+                    bounds.Y
+                ),
+                TextColor
+            );
+        }
+    }
+
     public class CharacterCustomizationDefaults : CharacterCustomization
     {
-        private float loadScale = 1f;
-        private readonly float loadBaseScale = 1f;
+        public static readonly int presetCount = 9;
 
-        private Color loadButttonColor = Game1.textColor;
-        private ClickableComponent loadButton;
+        private readonly List<PresetButton> presetButtons = new();
+
+        private int selectedPreset;
 
         private float saveScale = 1f;
         private readonly float saveBaseScale = 1f;
 
-        private Color saveButttonColor = Game1.textColor;
+        private Color saveButtonColor = Game1.textColor;
         private ClickableComponent saveButton;
+
+        public static readonly Rectangle textureBoxRect = new(0, 256, 60, 60);
 
         public CharacterCustomizationDefaults(Clothing item) : base(item)
         {
@@ -31,14 +72,14 @@ namespace DefaultFarmer
             setUpPositions();
         }
 
-        public void SaveDefaults()
+        public void SaveDefaults(int which)
         {
-            ModEntry.SaveDefaults(this);
+            ModEntry.SaveDefaults(this, which);
         }
 
-        public void LoadDefaults()
+        public void LoadDefaults(int which)
         {
-            ModEntry.LoadDefaults(this);
+            ModEntry.LoadDefaults(this, which);
         }
 
         public override void gameWindowSizeChanged(Rectangle oldBounds, Rectangle newBounds)
@@ -51,52 +92,89 @@ namespace DefaultFarmer
         {
             base.performHoverAction(x, y);
 
-            if (loadButton.containsPoint(x, y))
+            foreach (PresetButton button in presetButtons)
             {
-                loadScale = Math.Min(loadScale + 0.04f, loadBaseScale + 0.25f);
-                loadButttonColor = Game1.unselectedOptionColor;
+                if (button.containsPoint(x, y))
+                {
+                    button.Scale = Math.Min(button.Scale + 0.04f, button.BaseScale + 0.25f);
+                    button.TextColor = Game1.unselectedOptionColor;
+                }
+                else
+                {
+                    button.Scale = Math.Max(button.Scale - 0.04f, button.BaseScale);
+                    button.TextColor = Game1.textColor;
+                }
             }
-            else if (saveButton.containsPoint(x, y))
+
+            if (saveButton.containsPoint(x, y))
             {
                 saveScale = Math.Min(saveScale + 0.04f, saveBaseScale + 0.25f);
-                saveButttonColor = Game1.unselectedOptionColor;
+                saveButtonColor = Game1.unselectedOptionColor;
             }
             else
             {
-                loadScale = Math.Max(loadScale - 0.04f, loadBaseScale);
                 saveScale = Math.Max(saveScale - 0.04f, saveBaseScale);
-                loadButttonColor = Game1.textColor;
-                saveButttonColor = Game1.textColor;
+                saveButtonColor = Game1.textColor;
             }
         }
 
         private void setUpPositions()
         {
-            string loadText = "Load";
             string saveText = "Save";
-
-            Vector2 loadTextSize = Game1.smallFont.MeasureString(loadText);
-            loadButton = new(new(xPositionOnScreen + spaceToClearSideBorder + 300 - 48 + borderWidth, skipIntroButton.bounds.Y + 80, (int)loadTextSize.X, (int)loadTextSize.Y), "loadButton", loadText);
-
             Vector2 saveTextSize = Game1.smallFont.MeasureString(saveText);
-            saveButton = new(new(xPositionOnScreen + spaceToClearSideBorder + 300 - 48 + borderWidth + loadButton.bounds.Width + 48, skipIntroButton.bounds.Y + 80, (int)saveTextSize.X, (int)saveTextSize.Y), "saveButton", saveText);
+            saveButton = new(new(portraitBox.X + (portraitBox.Width / 2) - (int)saveTextSize.X / 2, portraitBox.Y - 16, (int)saveTextSize.X, (int)saveTextSize.Y), "saveButton", saveText);
+
+            presetButtons.Clear();
+
+            int buttonHeight = yPositionOnScreen + spaceToClearTopBorder + 90;
+            int buttonBiggestWidth = 0;
+            for (int i = 0; i < presetCount; i++)
+            {
+                string presetText = (i + 1).ToString();
+                Vector2 presetTextSize = Game1.smallFont.MeasureString(presetText);
+
+                presetButtons.Add(new(
+                    new(
+                        xPositionOnScreen + spaceToClearSideBorder * 3 + 2,
+                        buttonHeight,
+                        (int)presetTextSize.X,
+                        (int)presetTextSize.Y
+                    ),
+                    $"presetButton{i}",
+                    presetText
+                ));
+
+                if ((int)presetTextSize.X > buttonBiggestWidth)
+                    buttonBiggestWidth = (int)presetTextSize.X;
+
+                buttonHeight += (int)presetTextSize.Y + 32;
+            }
+
+            foreach (PresetButton button in presetButtons)
+                button.bounds.Width = buttonBiggestWidth;
         }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
         {
             base.receiveLeftClick(x, y, playSound);
 
-            if (loadButton != null && loadButton.containsPoint(x, y))
+            for (int i = 0; i < presetButtons.Count; i++)
             {
-                if (playSound)
-                    Game1.playSound("bigSelect");
-                LoadDefaults();
+                if (presetButtons[i].containsPoint(x, y))
+                {
+                    if (playSound)
+                        Game1.playSound("bigSelect");
+                    LoadDefaults(i);
+                    selectedPreset = i;
+                    break;
+                }
             }
-            else if (saveButton != null && saveButton.containsPoint(x, y))
+
+            if (saveButton != null && saveButton.containsPoint(x, y))
             {
                 if (playSound)
                     Game1.playSound("bigSelect");
-                SaveDefaults();
+                SaveDefaults(selectedPreset);
             }
         }
 
@@ -105,7 +183,7 @@ namespace DefaultFarmer
             drawTextureBox(
                 b,
                 Game1.menuTexture,
-                new Rectangle(0, 256, 60, 60),
+                textureBoxRect,
                 saveButton.bounds.X - 16,
                 saveButton.bounds.Y - 16,
                 saveButton.bounds.Width + 32,
@@ -123,32 +201,11 @@ namespace DefaultFarmer
                     saveButton.bounds.X,
                     saveButton.bounds.Y
                 ),
-                saveButttonColor
+                saveButtonColor
             );
 
-            drawTextureBox(
-                b,
-                Game1.menuTexture,
-                new Rectangle(0, 256, 60, 60),
-                loadButton.bounds.X - 16,
-                loadButton.bounds.Y - 16,
-                loadButton.bounds.Width + 32,
-                loadButton.bounds.Height + 24,
-                Color.White,
-                drawShadow: false,
-                scale: loadScale
-            );
-
-            Utility.drawBoldText(
-                b,
-                loadButton.label,
-                Game1.smallFont,
-                new Vector2(
-                    loadButton.bounds.X,
-                    loadButton.bounds.Y
-                ),
-                loadButttonColor
-            );
+            foreach (PresetButton button in presetButtons)
+                button.Draw(b);
         }
 
         public override void draw(SpriteBatch b)
