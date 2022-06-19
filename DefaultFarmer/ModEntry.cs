@@ -18,14 +18,14 @@ namespace DefaultFarmer
             Data = helper.Data;
 
             helper.Events.Display.MenuChanged += MenuChanged;
-            helper.Events.GameLoop.UpdateTicked += UpdateTicked;
 
-            Migrate();
+            helper.Events.GameLoop.UpdateTicked += UpdateTicked;
+            helper.Events.GameLoop.GameLaunched += Migrate;
         }
 
-        public void Migrate()
+        public void Migrate(object sender, GameLaunchedEventArgs e)
         {
-            FarmerCustomizationData data = Data.ReadGlobalData<FarmerCustomizationData>($"farmer-defaults");
+            FarmerCustomizationData data = Data.ReadGlobalData<FarmerCustomizationData>("farmer-defaults");
 
             if (data is null)
                 return;
